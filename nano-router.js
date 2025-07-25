@@ -58,7 +58,7 @@
       await match.handler({ params, query });
     };
 
-    const init = () => {
+    const run = () => {
       if (useHash) {
         window.addEventListener("hashchange", router);
       } else {
@@ -85,7 +85,7 @@
     };
 
     return {
-      init,
+      run,
       navigateTo
     };
   }
