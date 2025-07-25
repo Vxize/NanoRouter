@@ -29,5 +29,5 @@ const router = NanoRouter.createRouter(routes, {
   useHash: false,  //whether to use hash(#) in url, good for static site that cannot redirect everything to index.html. default is false
   useTag: '',  //if set, only <a href="/link" ${useTag}>Link</a> with 'useTag' attribute will work, default is '', which means all <a> tag will work
 });
-router.init();
+router.run();
 ```
