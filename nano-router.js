@@ -2,6 +2,7 @@
   function createRouter(routeMap, options = {}) {
     const useHash = options.useHash || false;
     const useTag = options.useTag || '';
+    const globalMiddleware = options.middleware || [];
 
     const pathToRegex = path =>
       new RegExp("^" + path.replace(/\//g, "\\/").replace(/:\w+/g, "([^\\/]+)") + "$");
@@ -33,29 +34,65 @@
       }
     };
 
+    // Execute middleware chain
+    const executeMiddleware = async (middlewares, context, finalHandler) => {
+      let index = 0;
+
+      const next = async () => {
+        if (index >= middlewares.length) {
+          // All middleware executed, run final handler
+          return await finalHandler(context);
+        }
+        const middleware = middlewares[index++];
+        return await middleware(context, next);
+      };
+
+      return await next();
+    };
+
     const router = async () => {
       const currentPath = getCurrentPath();
       const query = getQueryParams();
 
       const entries = Object.entries(routeMap).filter(([key]) => key !== "*");
-      const potentialMatches = entries.map(([routePath, handler]) => ({
+      const potentialMatches = entries.map(([routePath, config]) => ({
         routePath,
-        handler,
+        config,
         result: currentPath.match(pathToRegex(routePath))
       }));
 
       let match = potentialMatches.find(m => m.result !== null);
 
-      if (! match) {
+      if (!match) {
         match = {
-          handler: routeMap["*"] || (() => "404 Not Found"),
+          config: routeMap["*"] || (() => "404 Not Found"),
           routePath: "*",
           result: [currentPath]
         };
       }
 
       const params = getParams(match.routePath, match.result);
-      await match.handler({ params, query });
+      const context = { params, query, path: currentPath, navigateTo };
+
+      // Normalize config to handle both function and object formats
+      let handler, routeMiddleware = [];
+      
+      if (typeof match.config === 'function') {
+        handler = match.config;
+      } else if (typeof match.config === 'string') {
+        // Handle redirect
+        navigateTo(match.config);
+        return;
+      } else if (typeof match.config === 'object') {
+        handler = match.config.handler;
+        routeMiddleware = match.config.middleware || [];
+      }
+
+      // Combine global and route-specific middleware
+      const allMiddleware = [...globalMiddleware, ...routeMiddleware];
+
+      // Execute middleware chain with handler as final function
+      await executeMiddleware(allMiddleware, context, handler);
     };
 
     const run = () => {
