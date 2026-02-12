@@ -65,3 +65,65 @@ router.run();
 ```
 
 The `context` object passed to middleware includes `params`, `query`, `path`, and `navigateTo` for easy access. Call `next()` to continue the chain, or don't call it to stop execution (useful for redirects or auth failures).
+
+Any property you add to `context` in middleware will be available in following middlewares and route handlers!
+```
+const localeMiddleware = async (context, next) => {
+  context.locale = localStorage.getItem('locale') || 'en';
+  context.translations = await loadTranslations(context.locale);
+  await next();
+};
+
+const authMiddleware = async (context, next) => {
+  const token = localStorage.getItem('authToken');
+  if (token) {
+    context.user = await fetchUserFromToken(token);
+  }
+  await next();
+};
+
+const permissionsMiddleware = async (context, next) => {
+  // This middleware can access both locale and user from previous middleware
+  if (context.user) {
+    context.permissions = await fetchPermissions(context.user.id, context.locale);
+    context.isAdmin = context.permissions.includes('admin');
+  }
+  await next();
+};
+
+const loggingMiddleware = async (context, next) => {
+  // Can see everything set by previous middleware
+  console.log('Request:', {
+    path: context.path,
+    locale: context.locale,
+    user: context.user?.name,
+    isAdmin: context.isAdmin
+  });
+  await next();
+};
+
+const router = NanoRouter.createRouter({
+  '/admin': {
+    middleware: [
+      // Route-specific middleware can also access global context
+      async (context, next) => {
+        if (!context.isAdmin) { // Uses value from global middleware
+          context.navigateTo('/');
+          return;
+        }
+        await next();
+      }
+    ],
+    handler: async ({ locale, user, permissions, translations }) => {
+      // Handler gets everything from all middleware
+    }
+  }
+}, {
+  middleware: [
+    localeMiddleware,
+    authMiddleware,
+    permissionsMiddleware,
+    loggingMiddleware
+  ]
+});
+```
